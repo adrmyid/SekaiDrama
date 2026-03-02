@@ -1,4 +1,5 @@
 import { safeJson, encryptedResponse } from "@/lib/api-utils";
+import { optimizeCover } from "@/lib/image-utils";
 
 const UPSTREAM_API = (process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.sansekai.my.id/api") + "/shortmax";
 
@@ -17,7 +18,7 @@ export async function GET() {
     const dramas = (data.results || []).map((item: any) => ({
       shortPlayId: item.shortPlayId,
       title: item.name,
-      cover: item.cover,
+      cover: optimizeCover(item.cover),
       totalEpisodes: item.totalEpisodes || 0,
       label: item.label || "",
       collectNum: item.collectNum || 0,

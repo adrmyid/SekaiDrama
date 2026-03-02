@@ -1,4 +1,5 @@
 import { safeJson, encryptedResponse } from "@/lib/api-utils";
+import { optimizeCover } from "@/lib/image-utils";
 import { NextRequest } from "next/server";
 
 const UPSTREAM_API = (process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.sansekai.my.id/api") + "/shortmax";
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
       shortPlayId: item.shortPlayId,
       shortPlayCode: item.shortPlayCode,
       title: (item.name || "").replace(/<\/?em>/g, ""),
-      cover: item.cover,
+      cover: optimizeCover(item.cover),
       genre: (item.genre || []).map((g: string) => g.replace(/<\/?em>/g, "")),
     }));
 
