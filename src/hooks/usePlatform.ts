@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type Platform = "dramabox" | "reelshort" | "shortmax" | "netshort" | "melolo" | "flickreels" | "freereels";
+export type Platform = "dramabox" | "reelshort" | "shortmax" | "netshort" | "melolo" | "freereels" | "dramanova";
 
 export interface PlatformInfo {
   id: Platform;
@@ -42,17 +42,18 @@ export const PLATFORMS: PlatformInfo[] = [
     logo: "/melolo.webp",
     apiBase: "/api/melolo",
   },
-  {
-    id: "flickreels",
-    name: "FlickReels",
-    logo: "/flickreels.png",
-    apiBase: "/api/flickreels",
-  },
+
   {
     id: "freereels",
     name: "FreeReels",
     logo: "/freereels.webp",
     apiBase: "/api/freereels",
+  },
+  {
+    id: "dramanova",
+    name: "DramaNova",
+    logo: "/dramanova.png",
+    apiBase: "/api/dramanova",
   },
 ];
 
@@ -85,7 +86,7 @@ export function usePlatform() {
     isShortMax: currentPlatform === "shortmax",
     isNetShort: currentPlatform === "netshort",
     isMelolo: currentPlatform === "melolo",
-    isFlickReels: currentPlatform === "flickreels",
     isFreeReels: currentPlatform === "freereels",
+    isDramaNova: currentPlatform === "dramanova",
   };
 }

@@ -7,65 +7,62 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const shortPlayId = searchParams.get("shortPlayId");
+    const episodeNumber = searchParams.get("episodeNumber");
 
-    if (!shortPlayId) {
+    if (!shortPlayId || !episodeNumber) {
       return encryptedResponse(
-        { success: false, error: "shortPlayId is required" },
+        { success: false, error: "shortPlayId and episodeNumber are required" },
         400
       );
     }
 
     const response = await fetch(
-      `${UPSTREAM_API}/allepisode?shortPlayId=${shortPlayId}`,
+      `${UPSTREAM_API}/episode?shortPlayId=${shortPlayId}&episodeNumber=${episodeNumber}`,
       { cache: 'no-store' }
     );
 
     if (!response.ok) {
       return encryptedResponse(
-        { success: false, error: "Failed to fetch episodes" }
+        { success: false, error: "Failed to fetch episode" }
       );
     }
 
     const data = await safeJson<any>(response);
 
-    if (data.status !== "ok" || !data.episodes) {
+    if (data.status !== "ok" || !data.episode) {
       return encryptedResponse(
-        { success: false, error: "Episodes not found" }
+        { success: false, error: "Episode not found" }
       );
     }
 
-    // Map all episodes and proxy-rewrite video URLs for AES decryption
-    const episodes = data.episodes.map((ep: any) => {
-      const videoUrl: Record<string, string> = {};
-      if (ep.videoUrl) {
-        for (const [quality, url] of Object.entries(ep.videoUrl)) {
-          if (typeof url === "string" && url) {
-            videoUrl[quality] = `/api/shortmax/hls?url=${encodeURIComponent(url)}`;
-          }
+    const ep = data.episode;
+
+    // Proxy-rewrite video URLs so they go through our HLS proxy for AES decryption
+    const videoUrl: Record<string, string> = {};
+    if (ep.videoUrl) {
+      for (const [quality, url] of Object.entries(ep.videoUrl)) {
+        if (typeof url === "string" && url) {
+          videoUrl[quality] = `/api/shortmax/hls?url=${encodeURIComponent(url)}`;
         }
       }
-
-      return {
-        episodeNumber: ep.episodeNumber,
-        id: ep.id,
-        duration: ep.duration,
-        locked: ep.locked,
-        needDecrypt: ep.needDecrypt,
-        cover: ep.cover,
-        videoUrl,
-      };
-    });
+    }
 
     return encryptedResponse({
       success: true,
       shortPlayId: data.shortPlayId,
       shortPlayName: data.shortPlayName,
       totalEpisodes: data.totalEpisodes,
-      count: data.count,
-      episodes,
+      episode: {
+        episodeNum: ep.episodeNumber || ep.episodeNum,
+        id: ep.id,
+        duration: ep.duration,
+        locked: ep.locked,
+        cover: ep.cover,
+        videoUrl,
+      },
     });
   } catch (error) {
-    console.error("ShortMax AllEpisode Error:", error);
+    console.error("ShortMax Episode Error:", error);
     return encryptedResponse(
       { success: false, error: "Internal server error" }
     );

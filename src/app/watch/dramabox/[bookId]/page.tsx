@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useDramaDetail, useEpisodes } from "@/hooks/useDramaDetail";
 import { ChevronLeft, ChevronRight, Loader2, Settings, List, AlertCircle } from "lucide-react";
@@ -114,8 +114,8 @@ export default function DramaBoxWatchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableQualities.join(",")]);
 
-  // Get video URL with selected quality
-  const getVideoUrl = () => {
+  // Build the video URL: decrypt the encrypted videoPath via our proxy API
+  const videoUrl = useMemo(() => {
     if (!currentEpisodeData || !defaultCdn) return "";
 
     const videoPath =
@@ -123,8 +123,12 @@ export default function DramaBoxWatchPage() {
       defaultCdn.videoPathList.find((v) => v.isDefault === 1) ||
       defaultCdn.videoPathList[0];
 
-    return videoPath?.videoPath || "";
-  };
+    const rawUrl = videoPath?.videoPath || "";
+    if (!rawUrl) return "";
+
+    // Route through our decrypt-stream proxy which streams the decrypted video
+    return `/api/dramabox/decrypt-stream?url=${encodeURIComponent(rawUrl)}`;
+  }, [currentEpisodeData, defaultCdn, quality]);
 
   const handleVideoEnded = () => {
     if (!episodes) return;
@@ -305,7 +309,7 @@ export default function DramaBoxWatchPage() {
             {currentEpisodeData ? (
               <video
                 ref={videoRef}
-                src={getVideoUrl()}
+                src={videoUrl}
                 controls
                 autoPlay
                 onEnded={handleVideoEnded}

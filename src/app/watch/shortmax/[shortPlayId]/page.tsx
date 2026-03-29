@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useShortMaxAllEpisodes, useShortMaxDetail } from "@/hooks/useShortMax";
+import { useShortMaxEpisode, useShortMaxDetail } from "@/hooks/useShortMax";
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, List, Settings } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
@@ -33,43 +33,38 @@ export default function ShortMaxWatchPage() {
     }
   }, [searchParams]);
 
-  // Fetch detail for title
+  // Fetch detail for total episodes count and title
   const { data: detailData } = useShortMaxDetail(shortPlayId || "");
 
-  // Fetch ALL episodes in one call
-  const { data: allEpisodesData, isLoading, error } = useShortMaxAllEpisodes(
-    shortPlayId || ""
+  // Fetch current episode data
+  const { data: episodeData, isLoading, error } = useShortMaxEpisode(
+    shortPlayId || "",
+    currentEpisode
   );
 
-  // Get current episode data from the preloaded array
-  const currentEpisodeData = useMemo(() => {
-    if (!allEpisodesData?.episodes) return null;
-    return allEpisodesData.episodes.find(ep => ep.episodeNumber === currentEpisode) || null;
-  }, [allEpisodesData, currentEpisode]);
+  const totalEpisodes = detailData?.totalEpisodes || episodeData?.totalEpisodes || 1;
+  const title = detailData?.title || episodeData?.shortPlayName || "Loading...";
 
-  const totalEpisodes = allEpisodesData?.totalEpisodes || detailData?.totalEpisodes || 1;
-  const title = detailData?.title || allEpisodesData?.shortPlayName || "Loading...";
-
-  // Available quality options from current episode data
+  // Available quality options from episode data
   const qualityOptions = useMemo(() => {
-    const urls = currentEpisodeData?.videoUrl;
+    const urls = episodeData?.episode?.videoUrl;
     if (!urls) return [];
     const options: { key: string; label: string; quality: number }[] = [];
     if (urls.video_480) options.push({ key: "480", label: "480p", quality: 480 });
     if (urls.video_720) options.push({ key: "720", label: "720p", quality: 720 });
     if (urls.video_1080) options.push({ key: "1080", label: "1080p", quality: 1080 });
     return options.sort((a, b) => b.quality - a.quality);
-  }, [currentEpisodeData]);
+  }, [episodeData]);
 
   // Get video URL based on selected quality (default 720p)
   // URLs are already proxied through /api/shortmax/hls by the episode API (AES-128-CBC decryption)
   const getVideoUrl = useCallback(() => {
-    const urls = currentEpisodeData?.videoUrl;
+    const urls = episodeData?.episode?.videoUrl;
     if (!urls) return null;
     const qualityKey = `video_${selectedQuality}` as keyof typeof urls;
     // Try selected quality first, then fallback: 720p > 1080p > 480p
     return urls[qualityKey] || urls.video_720 || urls.video_1080 || urls.video_480 || null;
-  }, [currentEpisodeData, selectedQuality]);
+  }, [episodeData, selectedQuality]);
 
   // Handle video ended - auto next episode
   const handleVideoEnded = useCallback(() => {
@@ -215,7 +210,7 @@ export default function ShortMaxWatchPage() {
               </div>
             )}
 
-            {currentEpisodeData?.locked && (
+            {episodeData?.episode?.locked && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 z-20 bg-black/80">
                 <AlertCircle className="w-10 h-10 text-yellow-500 mb-4" />
                 <p className="text-white mb-2 font-semibold">Episode Terkunci</p>

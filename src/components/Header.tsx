@@ -10,8 +10,8 @@ import { useReelShortSearch } from "@/hooks/useReelShort";
 import { useNetShortSearch } from "@/hooks/useNetShort";
 import { useShortMaxSearch } from "@/hooks/useShortMax";
 import { useMeloloSearch } from "@/hooks/useMelolo";
-import { useFlickReelsSearch } from "@/hooks/useFlickReels";
 import { useFreeReelsSearch } from "@/hooks/useFreeReels";
+import { useDramaNovaSearch } from "@/hooks/useDramaNova";
 import { usePlatform } from "@/hooks/usePlatform";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePathname } from "next/navigation";
@@ -24,7 +24,7 @@ export function Header() {
   const normalizedQuery = debouncedQuery.trim();
 
   // Platform context
-  const { isDramaBox, isReelShort, isShortMax, isNetShort, isMelolo, isFlickReels, isFreeReels, platformInfo } = usePlatform();
+  const { isDramaBox, isReelShort, isShortMax, isNetShort, isMelolo, isFreeReels, isDramaNova, platformInfo } = usePlatform();
 
   // Search based on platform
   const { data: dramaBoxResults, isLoading: isSearchingDramaBox } = useSearchDramas(
@@ -42,11 +42,13 @@ export function Header() {
   const { data: meloloResults, isLoading: isSearchingMelolo } = useMeloloSearch(
     isMelolo ? normalizedQuery : ""
   );
-  const { data: flickReelsResults, isLoading: isSearchingFlickReels } = useFlickReelsSearch(
-    isFlickReels ? normalizedQuery : ""
-  );
+
   const { data: freeReelsResults, isLoading: isSearchingFreeReels } = useFreeReelsSearch(
     isFreeReels ? normalizedQuery : ""
+  );
+
+  const { data: dramaNovaResults, isLoading: isSearchingDramaNova } = useDramaNovaSearch(
+    isDramaNova ? normalizedQuery : ""
   );
 
   const isSearching = isDramaBox 
@@ -57,11 +59,11 @@ export function Header() {
         ? isSearchingShortMax
         : isNetShort 
           ? isSearchingNetShort
-          : isMelolo
-            ? isSearchingMelolo
-            : isFlickReels
-              ? isSearchingFlickReels
-              : isSearchingFreeReels;
+            : isMelolo
+              ? isSearchingMelolo
+              : isFreeReels
+                ? isSearchingFreeReels
+                : isSearchingDramaNova;
 
   // Search results processing
   const searchResults = isDramaBox 
@@ -75,9 +77,11 @@ export function Header() {
           : isMelolo
             ? meloloResults?.data?.search_data?.flatMap((item: any) => item.books || [])
                 .filter((book: any) => book.thumb_url && book.thumb_url !== "") || []
-            : isFlickReels
-              ? flickReelsResults?.data
-              : freeReelsResults;
+            : isFreeReels
+              ? freeReelsResults
+              : isDramaNova
+                ? dramaNovaResults
+                : [];
 
   const handleSearchClose = () => {
     setSearchOpen(false);
@@ -376,45 +380,7 @@ export function Header() {
                   </div>
                 )}
 
-                {/* FlickReels Results */}
-                {isFlickReels && searchResults && searchResults.length > 0 && (
-                  <div className="grid gap-3">
-                    {searchResults.map((book: any, index: number) => (
-                      <Link
-                        key={book.playlet_id}
-                        href={`/detail/flickreels/${book.playlet_id}`}
-                        onClick={handleSearchClose}
-                        className="flex gap-4 p-4 rounded-2xl bg-card hover:bg-muted transition-all text-left animate-fade-up overflow-hidden"
-                        style={{ animationDelay: `${index * 50}ms` }}
-                      >
-                        <img
-                          src={book.cover}
-                          alt={book.title}
-                          className="w-16 h-24 object-cover rounded-xl flex-shrink-0"
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-display font-semibold text-foreground truncate">{book.title}</h3>
-                          {book.introduce && (
-                            <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
-                              {book.introduce}
-                            </p>
-                          )}
-                          {book.tag_list && book.tag_list.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {book.tag_list.slice(0, 3).map((tag: any, idx: number) => (
-                                <span key={idx} className="tag-pill text-[10px]">
-                                  {tag.tag_name}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
+
 
                 {/* FreeReels Results */}
                 {isFreeReels && searchResults && searchResults.length > 0 && (
@@ -444,6 +410,46 @@ export function Header() {
                           {book.content_tags && book.content_tags.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mt-2">
                               {book.content_tags.slice(0, 3).map((tag: string, idx: number) => (
+                                <span key={idx} className="tag-pill text-[10px]">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
+                {/* DramaNova Results */}
+                {isDramaNova && searchResults && searchResults.length > 0 && (
+                  <div className="grid gap-3">
+                    {searchResults.map((drama: any, index: number) => (
+                      <Link
+                        key={drama.dramaId}
+                        href={`/detail/dramanova/${drama.dramaId}`}
+                        onClick={handleSearchClose}
+                        className="flex gap-4 p-4 rounded-2xl bg-card hover:bg-muted transition-all text-left animate-fade-up overflow-hidden"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <img
+                          src={drama.posterImgUrl}
+                          alt={drama.title}
+                          className="w-16 h-24 object-cover rounded-xl flex-shrink-0"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-display font-semibold text-foreground truncate">{drama.title}</h3>
+                          {drama.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
+                              {drama.description}
+                            </p>
+                          )}
+                          {drama.categoryNames && drama.categoryNames.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {drama.categoryNames.slice(0, 3).map((tag: string, idx: number) => (
                                 <span key={idx} className="tag-pill text-[10px]">
                                   {tag}
                                 </span>

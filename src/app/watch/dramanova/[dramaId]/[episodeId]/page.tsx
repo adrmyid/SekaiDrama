@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useMeloloDetail, useMeloloStream } from "@/hooks/useMelolo";
+import { useDramaNovaDetail, useDramaNovaVideo } from "@/hooks/useDramaNova";
 import { ChevronLeft, ChevronRight, Loader2, List, AlertCircle, Settings } from "lucide-react";
 import Link from "next/link";
 import {
@@ -18,98 +17,68 @@ interface VideoQuality {
   url: string;
 }
 
-export default function MeloloWatchPage() {
-  const params = useParams<{ bookId: string; videoId: string }>();
+export default function DramaNovaWatchPage() {
+  const params = useParams<{ dramaId: string; episodeId: string }>();
   const router = useRouter();
   const [showEpisodeList, setShowEpisodeList] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [selectedQuality, setSelectedQuality] = useState<VideoQuality | null>(null);
   
-  // Internal state for videoId to prevent page unmount/remount on navigation
-  const [currentVideoId, setCurrentVideoId] = useState(params.videoId || "");
+  // Internal state for episodeId to prevent page unmount/remount on navigation
+  const [currentEpisodeId, setCurrentEpisodeId] = useState(params.episodeId || "");
 
   // Sync state with params if they change externally (e.g. back button)
   useEffect(() => {
-    if (params.videoId && params.videoId !== currentVideoId) {
-      setCurrentVideoId(params.videoId);
+    if (params.episodeId && params.episodeId !== currentEpisodeId) {
+      setCurrentEpisodeId(params.episodeId);
     }
-  }, [params.videoId]);
+  }, [params.episodeId]);
 
   // Keep previous data to avoid unmounting video during transitions
-  const { data: detailData, isLoading: detailLoading } = useMeloloDetail(params.bookId || "");
-  const { data: streamData, isLoading: streamLoading, isFetching: streamFetching } = useMeloloStream(currentVideoId);
+  // detailData returns { data: DramaNovaDetailData } structure wrapped from response
+  const { data: dramaDetail, isLoading: detailLoading } = useDramaNovaDetail(params.dramaId || "");
+  
+  // Identify the current episode metadata
+  const currentEpisodeIndex = useMemo(() => {
+    if (!dramaDetail?.episodes) return -1;
+    return dramaDetail.episodes.findIndex(ep => ep.id === currentEpisodeId);
+  }, [dramaDetail, currentEpisodeId]);
 
-  const drama = detailData?.data?.video_data;
-  const rawVideoModel = streamData?.data?.video_model;
+  const currentEpisodeDetails = currentEpisodeIndex !== -1 ? dramaDetail?.episodes[currentEpisodeIndex] : null;
+  const currentFileId = currentEpisodeDetails?.fileId || "";
+
+  // Only execute video fetch if we have a valid fileId
+  const { data: streamData, isLoading: streamLoading, isFetching: streamFetching } = useDramaNovaVideo(currentFileId);
 
   // Process video qualities
   const qualities = useMemo(() => {
-    const getSafeUrl = (urlStr: string) => {
-      if (!urlStr) return "";
-      if (urlStr.startsWith("http")) return urlStr;
-      try {
-        const decoded = atob(urlStr);
-        if (decoded.startsWith("http")) return decoded;
-      } catch (e) {}
-      return urlStr;
-    };
-
-    if (!rawVideoModel && !streamData?.data?.main_url) return [];
+    if (!streamData?.PlayInfoList) return [];
     
     try {
-      let parsedModel = null;
-      if (rawVideoModel) {
-        parsedModel = typeof rawVideoModel === "string" ? JSON.parse(rawVideoModel) : rawVideoModel;
-      }
-      const videoList = parsedModel?.video_list;
       const availableQualities: VideoQuality[] = [];
 
-      if (videoList) {
-        const qualityMap: Record<string, string> = {
-          video_1: "240p",
-          video_2: "360p",
-          video_3: "480p",
-          video_4: "540p",
-          video_5: "720p",
-        };
-
-        Object.entries(videoList).forEach(([key, value]: [string, any]) => {
-          const finalUrl = value?.main_url_decoded || getSafeUrl(value?.main_url);
-          if (finalUrl) {
-            availableQualities.push({
-              name: value?.definition || qualityMap[key] || key,
-              url: finalUrl,
-            });
+      streamData.PlayInfoList.forEach(info => {
+          if (info.MainPlayUrl) {
+              const proxiedUrl = `/api/proxy/video?url=${encodeURIComponent(info.MainPlayUrl)}`;
+              availableQualities.push({
+                  name: info.Definition || "Normal",
+                  url: proxiedUrl
+              });
           }
-        });
+      });
 
-        // Sort qualities from highest to lowest resolution
-        availableQualities.sort((a, b) => {
-          const parseRes = (name: string) => parseInt(name.replace(/[^0-9]/g, "")) || 0;
-          return parseRes(b.name) - parseRes(a.name);
-        });
-      }
-
-      // Fallback to data.main_url if no qualities extracted
-      if (availableQualities.length === 0 && streamData?.data?.main_url) {
-        availableQualities.push({
-          name: "Default",
-          url: getSafeUrl(streamData.data.main_url),
-        });
-      }
+      // Sort qualities from highest to lowest resolution
+      availableQualities.sort((a, b) => {
+        const parseRes = (name: string) => parseInt(name.replace(/[^0-9]/g, "")) || 0;
+        return parseRes(b.name) - parseRes(a.name);
+      });
 
       return availableQualities;
     } catch (e) {
-      console.error("Error parsing video model", e);
-      if (streamData?.data?.main_url) {
-        return [{
-          name: "Default",
-          url: getSafeUrl(streamData.data.main_url),
-        }];
-      }
+      console.error("Error parsing video qualities", e);
       return [];
     }
-  }, [rawVideoModel, streamData]);
+  }, [streamData]);
 
   // Set default quality
   useEffect(() => {
@@ -120,8 +89,8 @@ export default function MeloloWatchPage() {
       }
       
       if (!nextQuality) {
-         // Prefer 720p as default if available, then 540p, then 480p, otherwise first
-         nextQuality = qualities.find(q => q.name === "720p") || qualities.find(q => q.name === "540p") || qualities.find(q => q.name === "480p") || qualities[0];
+         // Prefer 720p as default if available, then 1080p, otherwise first available
+         nextQuality = qualities.find(q => q.name === "720p") || qualities.find(q => q.name === "1080p") || qualities[0];
       }
 
       if (nextQuality && nextQuality.url !== selectedQuality?.url) {
@@ -130,19 +99,17 @@ export default function MeloloWatchPage() {
     }
   }, [qualities, selectedQuality]);
   
-  // Find current episode index
-  const currentEpisodeIndex = drama?.video_list?.findIndex(v => v.vid === currentVideoId) ?? -1;
-  const totalEpisodes = drama?.video_list?.length || 0;
+  const totalEpisodes = dramaDetail?.totalEpisodes || dramaDetail?.episodes?.length || 0;
 
   const handleEpisodeChange = (index: number) => {
-    if (!drama?.video_list?.[index]) return;
-    const nextVideoId = drama.video_list[index].vid;
+    if (!dramaDetail?.episodes?.[index]) return;
+    const nextEpisodeId = dramaDetail.episodes[index].id;
     
     // Update internal state
-    setCurrentVideoId(nextVideoId);
+    setCurrentEpisodeId(nextEpisodeId);
     
     // Update URL without triggering navigation
-    const newUrl = `/watch/melolo/${params.bookId}/${nextVideoId}`;
+    const newUrl = `/watch/dramanova/${params.dramaId}/${nextEpisodeId}`;
     window.history.pushState({ path: newUrl }, "", newUrl);
     
     setShowEpisodeList(false);
@@ -155,7 +122,7 @@ export default function MeloloWatchPage() {
   };
 
   // Guard: If logic fails completely and we have no data after loading
-  if (!detailLoading && !drama) {
+  if (!detailLoading && !dramaDetail) {
     return (
        <main className="fixed inset-0 bg-black flex flex-col items-center justify-center p-4">
         <AlertCircle className="w-12 h-12 text-destructive mb-4" />
@@ -174,7 +141,7 @@ export default function MeloloWatchPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-black/50 to-transparent" />
         <div className="relative z-10 flex items-center justify-between h-full px-4 max-w-7xl mx-auto pointer-events-auto">
           <Link
-            href={`/detail/melolo/${params.bookId}`}
+            href={`/detail/dramanova/${params.dramaId}`}
             className="flex items-center gap-2 text-white/90 hover:text-white transition-colors p-2 -ml-2 rounded-full hover:bg-white/10"
           >
             <ChevronLeft className="w-6 h-6" />
@@ -183,10 +150,10 @@ export default function MeloloWatchPage() {
 
           <div className="text-center flex-1 px-4 min-w-0">
             <h1 className="text-white font-medium truncate text-sm sm:text-base drop-shadow-md">
-              {drama?.series_title || "Loading..."}
+              {dramaDetail?.title || "Loading..."}
             </h1>
             <p className="text-white/80 text-xs drop-shadow-md">
-              Episode {currentEpisodeIndex !== -1 ? currentEpisodeIndex + 1 : "..."}
+              Episode {currentEpisodeDetails?.episodeNumber || (currentEpisodeIndex !== -1 ? currentEpisodeIndex + 1 : "...")}
             </p>
           </div>
 
@@ -228,8 +195,7 @@ export default function MeloloWatchPage() {
              {/* 
                  Video Element:
                  We remove the 'key' to allow the VIDEO element to be reused across renders.
-                 This is CRITICAL for maintaining Fullscreen status.
-                 We also use a ref to manually update if needed, though React src prop update usually suffices.
+                 This is CRITICAL for maintaining Fullscreen status automatically across episodes.
              */}
             {(selectedQuality) ? (
               <video
@@ -238,13 +204,31 @@ export default function MeloloWatchPage() {
                 controls
                 autoPlay
                 playsInline
+                crossOrigin="anonymous"
                 onEnded={handleVideoEnded}
                 className="w-full h-full object-contain max-h-[100dvh]"
-              />
+              >
+                  {currentEpisodeDetails?.subtitleTracks?.map((track) => {
+                      const langLabel = track.language === 'in' || track.language === 'id' ? 'Indonesia' : track.language.toUpperCase();
+                      const rawTrackSrc = track.label || track.url || "";
+                      const trackSrc = rawTrackSrc ? `/api/proxy/video?url=${encodeURIComponent(rawTrackSrc)}` : "";
+                      return trackSrc ? (
+                        <track 
+                            key={track.id} 
+                            kind="subtitles" 
+                            src={trackSrc} 
+                            srcLang={track.language}
+                            label={langLabel}
+                            default={track.language === 'in'}
+                            // NOTE: API may proxy URLs, make sure it allows crossOrigin if external
+                        />
+                      ) : null;
+                  })}
+              </video>
             ) : (
                 // Fallback while initializing first time quality
                 <div className="w-full h-full flex items-center justify-center text-white/50">
-                    {streamLoading ? "" : "Video unavailable"}
+                    {streamLoading || !currentFileId ? "" : "Video unavailable"}
                 </div>
             )}
             
@@ -283,7 +267,7 @@ export default function MeloloWatchPage() {
        </div>
 
        {/* Episode List Sidebar */}
-       {showEpisodeList && drama && (
+       {showEpisodeList && dramaDetail && (
         <>
           <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
@@ -305,9 +289,9 @@ export default function MeloloWatchPage() {
               </button>
             </div>
             <div className="p-3 grid grid-cols-5 gap-2">
-              {drama.video_list.map((video, idx) => (
+              {dramaDetail.episodes?.map((episode, idx) => (
                 <button
-                  key={video.vid}
+                  key={episode.id}
                   onClick={() => handleEpisodeChange(idx)}
                   className={`
                     aspect-square flex items-center justify-center rounded-lg text-sm font-medium transition-all
@@ -317,7 +301,7 @@ export default function MeloloWatchPage() {
                     }
                   `}
                 >
-                  {idx + 1}
+                  {episode.episodeNumber || idx + 1}
                 </button>
               ))}
             </div>
